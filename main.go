@@ -76,7 +76,7 @@ func main() {
 	// mux.Get("/authorize", func(w http.ResponseWriter, r *http.Request) {}) // authorization consent screen
 	// mux.Post("/token", func(w http.ResponseWriter, r *http.Request) {})    // retrieve token
 	r.Get("/users", api.MakeHandlerFunc(user.GetAll))
-	r.Post("/users", api.MakeHandlerFunc(user.CreateUser))
+	r.Post("/users", api.MakeHandlerFunc(user.Create))
 	r.Post("/sessions", api.MakeHandlerFunc(user.CreateSession))
 
 	log.Fatal(http.ListenAndServe(":3000", r))

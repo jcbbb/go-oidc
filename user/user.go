@@ -5,12 +5,27 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"time"
 
 	"github.com/jcbbb/go-oidc/api"
 	"github.com/jcbbb/go-oidc/argon"
 	"github.com/jcbbb/go-oidc/db"
 )
+
+var (
+	ErrUserNotFound         = api.Error{StatusCode: http.StatusNotFound, Message: "User not found", Code: "resource_not_found"}
+	ErrPasswordVerification = api.Error{StatusCode: http.StatusBadRequest, Message: "Password verification faled", Code: "bad_request"}
+	ErrJSONParse            = api.Error{StatusCode: http.StatusUnprocessableEntity, Message: "Unable to parse JSON body", Code: "unprocessable_entity"}
+)
+
+type Session struct {
+	ID        string    `json:"id"`
+	Active    bool      `json:"active"`
+	ExpiresAt time.Time `json:"expires_at"`
+	UserID    int       `json:"user_id"`
+}
 
 type User struct {
 	ID            int    `json:"id"`
@@ -24,7 +39,7 @@ type User struct {
 	Verified      bool   `json:"verified"`
 }
 
-type UserLoginReq struct {
+type SessionReq struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
@@ -45,6 +60,14 @@ func New(firstName, lastName, email, phone, password string) *User {
 		Email:     email,
 		Phone:     phone,
 		Password:  password,
+	}
+}
+
+func NewSession(userId int, expiresAt time.Time) *Session {
+	return &Session{
+		UserID:    userId,
+		ExpiresAt: expiresAt,
+		Active:    true,
 	}
 }
 
@@ -91,18 +114,19 @@ func GetAll(w http.ResponseWriter, r *http.Request) error {
 	return api.WriteJSON(w, http.StatusOK, users)
 }
 
-func CreateUser(w http.ResponseWriter, r *http.Request) error {
+func Create(w http.ResponseWriter, r *http.Request) error {
 	var userReq NewUserReq
 	defer r.Body.Close()
 
 	err := json.NewDecoder(r.Body).Decode(&userReq)
 
 	if err != nil {
-		return api.Error{StatusCode: 500, Message: "Unable to decode json body", Code: "invalid_json_body"}
+		return ErrJSONParse
 	}
 
-	hash, err := argon.Hash(userReq.Password)
+	user := New(userReq.FirstName, userReq.LastName, userReq.Email, userReq.Email, userReq.Password)
 
+	err = user.hashPassword()
 	if err != nil {
 		return api.Error{StatusCode: 500, Message: "Unable to hash password", Code: "invalid_hash"}
 	}
@@ -110,48 +134,52 @@ func CreateUser(w http.ResponseWriter, r *http.Request) error {
 	row := db.Pool.QueryRow(
 		context.Background(),
 		"insert into users (first_name, last_name, email, phone, password) values ($1, $2, $3, $4, $5) returning id",
-		userReq.FirstName, userReq.LastName, userReq.Email, userReq.Phone, hash,
+		user.FirstName, user.LastName, user.Email, user.Phone, user.Password,
 	)
 
 	if err := row.Scan(&userReq.ID); err != nil {
-		fmt.Println(err)
 	}
-
-	user := New(userReq.FirstName, userReq.LastName, userReq.Email, userReq.Phone, userReq.Password)
 
 	return api.WriteJSON(w, http.StatusCreated, user)
 }
 
 func CreateSession(w http.ResponseWriter, r *http.Request) error {
-	var loginReq UserLoginReq
+	var sessionReq SessionReq
 	defer r.Body.Close()
 
-	err := json.NewDecoder(r.Body).Decode(&loginReq)
+	err := json.NewDecoder(r.Body).Decode(&sessionReq)
 
 	if err != nil {
-		return api.Error{StatusCode: 400, Message: "Unable to decode json body", Code: "invalid_json"}
+		return ErrJSONParse
 	}
 
 	var user User
 
-	row := db.Pool.QueryRow(context.Background(), "select password, email from users where email = $1", loginReq.Email)
+	row := db.Pool.QueryRow(context.Background(), "select id, email, password from users where email = $1", sessionReq.Email)
 
-	if err := row.Scan(&user.Password, &user.Email); err != nil {
-		fmt.Println(err)
+	if err := row.Scan(&user.ID, &user.Email, &user.Password); err != nil {
 		if err == sql.ErrNoRows {
-			return api.Error{StatusCode: 404, Message: "User not found", Code: "resource_not_found"}
+			return ErrUserNotFound
 		}
 		return api.Error{StatusCode: 500, Message: "Internal error", Code: "internal_error"}
 	}
 
-	match, err := user.verifyPassword(loginReq.Password)
+	match, err := user.verifyPassword(sessionReq.Password)
 
-	if err != nil {
-		fmt.Println(err)
+	if err != nil || !match {
+		return ErrPasswordVerification
+	}
+
+	session := NewSession(user.ID, time.Now().AddDate(0, 6, 0))
+
+	host, _, _ := net.SplitHostPort(r.RemoteAddr)
+	row = db.Pool.QueryRow(context.Background(), "insert into sessions (user_id, expires_at, ip) values ($1, $2, $3) returning id", session.UserID, session.ExpiresAt, host)
+
+	if err := row.Scan(&session.ID); err != nil {
 		return api.Error{StatusCode: 500, Message: err.Error(), Code: "internal_error"}
 	}
 
-	return api.WriteJSON(w, http.StatusOK, match)
+	return api.WriteJSON(w, http.StatusOK, session)
 }
 
 // // func createClient(w http.ResponseWriter, r *http.Request) error {
