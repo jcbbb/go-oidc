@@ -7,7 +7,7 @@ CREATE TABLE "users" (
   "email" varchar(255),
   "email_verified" boolean DEFAULT FALSE,
   "phone" varchar(255),
-  "phone_verified" varchar(255) DEFAULT 'false',
+  "phone_verified" boolean DEFAULT FALSE,
   "password" varchar(255) NOT NULL,
   "verified" boolean DEFAULT FALSE,
   "created_at" timestamp with time zone DEFAULT NOW() NOT NULL,

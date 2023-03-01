@@ -4,12 +4,14 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jcbbb/go-oidc/api"
 	"github.com/jcbbb/go-oidc/db"
 	"github.com/jcbbb/go-oidc/user"
+	"github.com/joho/godotenv"
 )
 
 // Client (application redirecting resource owner (user) to Authorization Server)
@@ -59,9 +61,54 @@ import (
 /* Token Request */
 // client_id*
 
+// const sid = req.session.get("sid") || req.headers["authorization"];
+// const session = await SessionService.get_one(sid);
+
+// if (sid && !session) {
+//   req.session.delete();
+// }
+
+// const user = await UserService.get_one(session?.user_id, ["roles"]);
+// req.user = user?.toJSON();
+
+// func AttachUser(next http.Handler) http.Handler {
+// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 		cookie, err := r.Cookie("ssid")
+// 		if err != nil {
+// 			return
+// 		}
+// 		sid, err := securecookie.Decode(cookie)
+// 		if err != nil {
+// 			return
+// 		}
+
+// 		session, err := user.GetSession(sid)
+
+// 		if err != nil {
+// 			return
+// 		}
+
+// 		user, err := user.GetUser(session.UserID)
+
+// 		if err != nil {
+// 			return
+// 		}
+
+// 		fmt.Printf("%+v\n", user)
+// 		next.ServeHTTP(w, r)
+// 	})
+// }
+
 func main() {
-	var err error
-	db.Pool, err = pgxpool.New(context.Background(), "postgresql://jcbbb:2157132aA*codes@localhost:5432/oidc-dev")
+	err := godotenv.Load()
+
+	if err != nil {
+		panic(err)
+	}
+
+	postgresUri := os.Getenv("POSTGRES_URI")
+	db.Pool, err = pgxpool.New(context.Background(), postgresUri)
+
 	if err != nil {
 		panic(err)
 	}
@@ -69,15 +116,16 @@ func main() {
 	defer db.Pool.Close()
 
 	r := chi.NewRouter()
+	// r.Use(user.HandleAttach)
 	// mux := NewMux()
 	// api := NewApi(pool)
 
 	// // mux.Post("/clients", makeHandlerFunc(createClient))                    // register clients (apps)
 	// mux.Get("/authorize", func(w http.ResponseWriter, r *http.Request) {}) // authorization consent screen
 	// mux.Post("/token", func(w http.ResponseWriter, r *http.Request) {})    // retrieve token
-	r.Get("/users", api.MakeHandlerFunc(user.GetAll))
-	r.Post("/users", api.MakeHandlerFunc(user.Create))
-	r.Post("/sessions", api.MakeHandlerFunc(user.CreateSession))
+	r.Get("/users", api.MakeHandlerFunc(user.HandleGetAll))
+	r.Post("/users", api.MakeHandlerFunc(user.HandleCreate))
+	r.Post("/sessions", api.MakeHandlerFunc(user.HandleCreateSession))
 
 	log.Fatal(http.ListenAndServe(":3000", r))
 }
