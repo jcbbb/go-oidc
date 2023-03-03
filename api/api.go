@@ -35,3 +35,39 @@ func MakeHandlerFunc(f apiFunc) http.HandlerFunc {
 		}
 	}
 }
+
+func ErrResourceNotFound(message, uri string) Error {
+	return Error{
+		StatusCode: http.StatusNotFound,
+		Code:       "resource_not_found",
+		Message:    message,
+		URI:        uri,
+	}
+}
+
+func ErrBadRequest(message, uri string) Error {
+	return Error{
+		StatusCode: http.StatusBadRequest,
+		Code:       "bad_request",
+		Message:    message,
+		URI:        uri,
+	}
+}
+
+func ErrConflict(message, uri string) Error {
+	return Error{
+		StatusCode: http.StatusConflict,
+		Code:       "conflict",
+		Message:    message,
+		URI:        uri,
+	}
+}
+
+func ErrInternal(message, uri string) Error {
+	return Error{
+		StatusCode: http.StatusInternalServerError,
+		Code:       "internal_server",
+		Message:    message,
+		URI:        uri,
+	}
+}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"embed"
 	"log"
 	"net/http"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"github.com/jcbbb/go-oidc/api"
 	"github.com/jcbbb/go-oidc/db"
 	"github.com/jcbbb/go-oidc/user"
+	"github.com/jcbbb/go-oidc/views"
 	"github.com/joho/godotenv"
 )
 
@@ -99,6 +101,9 @@ import (
 // 	})
 // }
 
+//go:embed views/*.html
+var viewsFS embed.FS
+
 func main() {
 	err := godotenv.Load()
 
@@ -115,7 +120,11 @@ func main() {
 
 	defer db.Pool.Close()
 
+	views.ViewsFS = viewsFS
+	views.LoadViews()
+
 	r := chi.NewRouter()
+	// r.Use(user.HandleResolveSessions)
 	// r.Use(user.HandleAttach)
 	// mux := NewMux()
 	// api := NewApi(pool)
@@ -123,7 +132,12 @@ func main() {
 	// // mux.Post("/clients", makeHandlerFunc(createClient))                    // register clients (apps)
 	// mux.Get("/authorize", func(w http.ResponseWriter, r *http.Request) {}) // authorization consent screen
 	// mux.Post("/token", func(w http.ResponseWriter, r *http.Request) {})    // retrieve token
+
 	r.Get("/users", api.MakeHandlerFunc(user.HandleGetAll))
+	r.Get("/auth/login", api.MakeHandlerFunc(user.HandleLoginView))
+	r.Get("/auth/signup", api.MakeHandlerFunc(user.HandleSignupView))
+	r.Post("/auth/signup", api.MakeHandlerFunc(user.HandleLogin))
+	r.Post("/auth/login", api.MakeHandlerFunc(user.HandleSignup))
 	r.Post("/users", api.MakeHandlerFunc(user.HandleCreate))
 	r.Post("/sessions", api.MakeHandlerFunc(user.HandleCreateSession))
 

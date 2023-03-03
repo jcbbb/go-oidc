@@ -3,11 +3,15 @@ package user
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jcbbb/go-oidc/api"
 	"github.com/jcbbb/go-oidc/argon"
 	"github.com/jcbbb/go-oidc/db"
@@ -56,12 +60,12 @@ func getAll() (*[]User, error) {
 	var users []User
 	rows, err := db.Pool.Query(context.Background(), "select id, first_name, last_name, email, phone from users order by id desc")
 
+	defer rows.Close()
+
 	if err != nil {
 		fmt.Println(err)
 		return nil, api.Error{StatusCode: 500, Message: "Something went wrong", Code: "query_err"}
 	}
-
-	defer rows.Close()
 
 	for rows.Next() {
 		var user User
@@ -83,8 +87,9 @@ func getAll() (*[]User, error) {
 func create(req NewUserReq) (*User, error) {
 	user := New(req.FirstName, req.LastName, req.Email, req.Phone, req.Password)
 	err := user.hashPassword()
+
 	if err != nil {
-		return nil, api.Error{StatusCode: 500, Message: "Unable to hash password", Code: "invalid_hash"}
+		return nil, api.ErrInternal("Unable to hash password", "")
 	}
 
 	row := db.Pool.QueryRow(
@@ -94,6 +99,13 @@ func create(req NewUserReq) (*User, error) {
 	)
 
 	if err := row.Scan(&req.ID); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			if pgerrcode.IsIntegrityConstraintViolation(pgErr.Code) {
+				return nil, api.ErrConflict("User already exists", "")
+			}
+		}
+		return nil, api.ErrInternal("Something went wrong", "")
 	}
 
 	return user, nil
@@ -104,10 +116,42 @@ func getSession(sid string) (Session, error) {
 	row := db.Pool.QueryRow(context.Background(), "select id, user_id, expires_at, active from sessions where id = $1", sid)
 
 	if err := row.Scan(&session.ID, &session.UserID, &session.ExpiresAt, &session.Active); err != nil {
-		return session, api.Error{StatusCode: 500, Message: err.Error(), Code: "internal_error"}
+		if errors.Is(err, pgx.ErrNoRows) {
+			fmt.Printf("Here")
+			return session, api.ErrResourceNotFound("Session not found for user", "")
+		}
+		fmt.Printf("After")
+		return session, api.ErrInternal("Internal error", "")
 	}
 
 	return session, nil
+}
+
+func getSessions(sids []string) ([]Session, error) {
+	var sessions []Session
+	rows, err := db.Pool.Query(context.Background(), "select id, user_id, expires_at, active from sessions where id = any($1)", sids)
+
+	defer rows.Close()
+	if err != nil {
+		fmt.Println(err)
+		return nil, api.Error{StatusCode: 500, Message: "Something went wrong", Code: "query_err"}
+	}
+
+	for rows.Next() {
+		var session Session
+		if err := rows.Scan(&session.ID, &session.UserID, &session.ExpiresAt, &session.Active); err != nil {
+			fmt.Println(err)
+			return nil, api.Error{StatusCode: 500, Message: "Something went wrong", Code: "query_err"}
+		}
+		sessions = append(sessions, session)
+	}
+
+	if err := rows.Err(); err != nil {
+		fmt.Println(err)
+		return nil, api.Error{StatusCode: 500, Message: "Something went wrong", Code: "query_err"}
+	}
+
+	return sessions, nil
 }
 
 func getUser(userId int) (*User, error) {

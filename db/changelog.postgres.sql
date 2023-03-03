@@ -84,10 +84,15 @@ CREATE INDEX "idx_privileges_permission_id" ON privileges ("permission_id");
 
 CREATE INDEX "idx_privileges_user_id" ON privileges ("user_id");
 
-CREATE INDEX "idx_sessions_user_id" ON sessions ("user_id")
-  -- rollback DROP TABLE authorization_requests CASCADE;
-  -- rollback DROP TABLE clients CASCADE;
-  -- rollback DROP TABLE permissions CASCADE;
-  -- rollback DROP TABLE "privileges" CASCADE;
-  -- rollback DROP TABLE sessions CASCADE;
-  -- rollback DROP TABLE users CASCADE;
+CREATE INDEX "idx_sessions_user_id" ON sessions ("user_id");
+
+CREATE UNIQUE INDEX "uidx_users_email" ON users (email);
+
+CREATE UNIQUE INDEX "uidx_users_phone" ON users (phone);
+
+-- rollback DROP TABLE authorization_requests CASCADE;
+-- rollback DROP TABLE clients CASCADE;
+-- rollback DROP TABLE permissions CASCADE;
+-- rollback DROP TABLE "privileges" CASCADE;
+-- rollback DROP TABLE sessions CASCADE;
+-- rollback DROP TABLE users CASCADE;

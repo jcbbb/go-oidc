@@ -1,6 +1,7 @@
 package user
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,39 +11,84 @@ import (
 	"github.com/jcbbb/go-oidc/api"
 	"github.com/jcbbb/go-oidc/securecookie"
 	"github.com/jcbbb/go-oidc/util"
+	"github.com/jcbbb/go-oidc/views"
 )
 
-func HandleAttach(next http.Handler) http.Handler {
+func HandleResolveSessions(next http.Handler) http.Handler {
 	return api.MakeHandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
-		cookie, err := r.Cookie(securecookie.SidCookieName)
-		if err != nil {
-			return err
+		sidCookie, _ := r.Cookie(securecookie.SidCookieName)
+		if sidCookie == nil {
+			sidCookie = &http.Cookie{}
+		}
+		sidsCookie, _ := r.Cookie(securecookie.SidsCookieName)
+		if sidsCookie == nil {
+			sidsCookie = &http.Cookie{}
 		}
 
-		sid, err := securecookie.Decode(cookie)
+		sid, err := securecookie.Decode(sidCookie)
 		if err != nil {
 			return err
 		}
 
 		session, err := getSession(sid)
+		if err != nil {
+			return err
+		}
+
+		sidsStr, err := securecookie.Decode(sidsCookie)
+		if err != nil {
+			return err
+		}
+
+		sids := strings.Split(sidsStr, "|")
+		sessions, err := getSessions(sids)
 
 		if err != nil {
 			return err
 		}
 
-		user, err := getUser(session.UserID)
+		fmt.Printf("%+v\n", session)
+		fmt.Printf("%+v\n", sessions)
 
-		if err != nil {
-			return err
-		}
-
-		fmt.Printf("%+v\n", user)
 		next.ServeHTTP(w, r)
 		return nil
 	})
 }
 
+func HandleAttach(next http.Handler) http.Handler {
+	return api.MakeHandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
+		sidCookie, _ := r.Cookie(securecookie.SidCookieName)
+		if sidCookie == nil {
+			sidCookie = &http.Cookie{}
+		}
+
+		sid, err := securecookie.Decode(sidCookie)
+		if err != nil {
+			return err
+		}
+
+		session, err := getSession(sid)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("SESSION: %+v\n", session)
+
+		user, err := getUser(session.UserID)
+		if err != nil {
+			return err
+		}
+
+		ctx := r.Context()
+		ctx = context.WithValue(ctx, "user", user)
+		next.ServeHTTP(w, r.WithContext(ctx))
+		return nil
+	})
+}
+
 func HandleGetAll(w http.ResponseWriter, r *http.Request) error {
+	// user := r.Context().Value("user").(*User)
+
 	users, err := getAll()
 
 	if err != nil {
@@ -50,6 +96,27 @@ func HandleGetAll(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return api.WriteJSON(w, http.StatusOK, users)
+}
+
+func HandleLoginView(w http.ResponseWriter, r *http.Request) error {
+	return views.Login.ExecuteTemplate(w, "login.html", "")
+}
+
+func HandleSignupView(w http.ResponseWriter, r *http.Request) error {
+	return views.Signup.ExecuteTemplate(w, "signup.html", "")
+}
+
+func HandleAuthorizeView(w http.ResponseWriter, r *http.Request) error {
+	// return views.Render(w, "authorize", "")
+	return nil
+}
+
+func HandleSignup(w http.ResponseWriter, r *http.Request) error {
+	return nil
+}
+
+func HandleLogin(w http.ResponseWriter, r *http.Request) error {
+	return nil
 }
 
 func HandleCreate(w http.ResponseWriter, r *http.Request) error {
@@ -61,6 +128,7 @@ func HandleCreate(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return ErrJSONParse
 	}
+
 	user, err := create(userReq)
 
 	if err != nil {
