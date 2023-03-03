@@ -1,5 +1,31 @@
 {{template "layout.html" .}}
 {{define "title"}}Login{{end}}
 {{define "content"}}
-<h1>Hello world from login</h1>
+<div class="max-w-md mx-auto rounded-md bg-white p-6 space-y-8">
+  <h1 class="text-2xl font-semibold">Login</h1>
+  <form method="post" id="" action="/users" class="flex flex-col space-y-4">
+    {{if eq .Method "phone"}}
+      <div class="flex flex-col">
+        <label class="flex flex-col text-gray-700 font-medium text-sm">
+          Phone
+          <input type="number" name="phone" class="p-2 mt-1 border rounded-md focus-within:outline-yellow-500" placeholder="+1 890 777 77 77"/>
+        </label>
+        <a href="/auth/login?method=email" class="ml-auto text-sm text-blue-600 mt-1">Email-ID</a>
+      </div>
+    {{else}}
+      <div class="flex flex-col">
+        <label class="flex flex-col text-gray-700 font-medium text-sm">
+          Email
+          <input type="email" name="email" class="p-2 mt-1 border rounded-md focus-within:outline-yellow-500" placeholder="john@gmail.com" />
+        </label>
+        <a href="/auth/login?method=phone" class="ml-auto text-sm text-blue-600 mt-1">Phone-ID</a>
+      </div>
+    {{end}}
+    <label class="flex flex-col text-gray-700 font-medium text-sm">
+      Password
+      <input type="password" name="password" class="p-2 mt-1 border rounded-md focus-within:outline-yellow-500" placeholder="complicated-passphrase"/>
+    </label>
+    <button class="bg-yellow-500 text-gray-900 border-0 px-4 py-2 rounded-md">Login</button>
+  </form>
+</div>
 {{end}}

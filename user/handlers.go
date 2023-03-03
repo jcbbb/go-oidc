@@ -98,8 +98,13 @@ func HandleGetAll(w http.ResponseWriter, r *http.Request) error {
 	return api.WriteJSON(w, http.StatusOK, users)
 }
 
+type LoginViewParams struct {
+	Method string
+}
+
 func HandleLoginView(w http.ResponseWriter, r *http.Request) error {
-	return views.Login.ExecuteTemplate(w, "login.html", "")
+	method := r.URL.Query().Get("method")
+	return views.Login.ExecuteTemplate(w, "login.html", &LoginViewParams{Method: method})
 }
 
 func HandleSignupView(w http.ResponseWriter, r *http.Request) error {
