@@ -135,13 +135,15 @@ func main() {
 	// mux.Get("/authorize", func(w http.ResponseWriter, r *http.Request) {}) // authorization consent screen
 	// mux.Post("/token", func(w http.ResponseWriter, r *http.Request) {})    // retrieve token
 
-	r.Get("/users", api.MakeHandlerFunc(user.HandleGetAll))
-	r.Get("/auth/login", api.MakeHandlerFunc(user.HandleLoginView))
-	r.Get("/auth/signup", api.MakeHandlerFunc(user.HandleSignupView))
-	r.Post("/auth/signup", api.MakeHandlerFunc(user.HandleLogin))
-	r.Post("/auth/login", api.MakeHandlerFunc(user.HandleSignup))
+	r.Get("/users", api.MakeHandlerFuncJSON(user.HandleGetAll))
+	r.Get("/auth/login", api.MakeHandlerFuncJSON(user.HandleLoginView))
+	r.Get("/auth/signup", api.MakeHandlerFuncJSON(user.HandleSignupView))
+	r.Post("/auth/signup", api.MakeHandlerFuncJSON(user.HandleLogin))
+	r.Post("/auth/login", api.MakeHandlerFuncJSON(user.HandleSignup))
 	r.Post("/users", api.MakeHandlerFunc(user.HandleCreate))
-	r.Post("/sessions", api.MakeHandlerFunc(user.HandleCreateSession))
+	r.Get("/users/new", api.MakeHandlerFunc(user.HandleSignupView))
+	r.Get("/sessions/new", api.MakeHandlerFunc(user.HandleLoginView))
+	r.Post("/sessions", api.MakeHandlerFunc(user.HandleLogin))
 
 	workDir, _ := os.Getwd()
 	FileServer(r, "/static", http.Dir(filepath.Join(workDir, "static")))

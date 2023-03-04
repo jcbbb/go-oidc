@@ -23,6 +23,7 @@ type User struct {
 
 type SessionReq struct {
 	Email    string `json:"email"`
+	Phone    string `json:"phone"`
 	Password string `json:"password"`
 }
 

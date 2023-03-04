@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/jcbbb/go-oidc/util"
 )
 
 type Error struct {
@@ -24,7 +26,7 @@ func WriteJSON(w http.ResponseWriter, status int, v any) error {
 	return json.NewEncoder(w).Encode(v)
 }
 
-func MakeHandlerFunc(f apiFunc) http.HandlerFunc {
+func MakeHandlerFuncJSON(f apiFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := f(w, r); err != nil {
 			if e, ok := err.(Error); ok {
@@ -32,6 +34,30 @@ func MakeHandlerFunc(f apiFunc) http.HandlerFunc {
 				return
 			}
 			WriteJSON(w, http.StatusInternalServerError, Error{StatusCode: http.StatusInternalServerError, Message: "internal server error", Code: "internal_error"})
+		}
+	}
+}
+
+func MakeHandlerFunc(f apiFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := f(w, r); err != nil {
+			errTo := r.URL.Query().Get("err_to")
+
+			if len(errTo) == 0 {
+				errTo = r.Referer()
+			}
+
+			if e, ok := err.(Error); ok {
+				util.SetFlash(w, &util.FlashMessage{
+					Kind:  util.FlashError,
+					Value: []byte(e.Message),
+				})
+
+				http.Redirect(w, r, errTo, http.StatusFound)
+				return
+			}
+
+			http.Redirect(w, r, errTo, http.StatusFound)
 		}
 	}
 }

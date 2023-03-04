@@ -14,7 +14,11 @@ var (
 )
 
 func LoadViews() {
-	Base = template.Must(template.ParseFS(ViewsFS, "views/login.html", "views/layout.html", "views/signup.html"))
+	funcs := template.FuncMap{
+		"deref": func(i *int) int { return *i },
+	}
+
+	Base = template.Must(template.New("").Funcs(funcs).ParseFS(ViewsFS, "views/login.html", "views/layout.html", "views/signup.html"))
 	Signup, err = template.Must(Base.Clone()).ParseFS(ViewsFS, "views/signup.html", "views/layout.html")
 	Login, err = template.Must(Base.Clone()).ParseFS(ViewsFS, "views/login.html", "views/layout.html")
 

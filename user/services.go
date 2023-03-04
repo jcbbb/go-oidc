@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgerrcode"
@@ -15,11 +16,13 @@ import (
 	"github.com/jcbbb/go-oidc/api"
 	"github.com/jcbbb/go-oidc/argon"
 	"github.com/jcbbb/go-oidc/db"
+	"github.com/jcbbb/go-oidc/securecookie"
+	"github.com/jcbbb/go-oidc/util"
 )
 
 var (
 	ErrUserNotFound         = api.Error{StatusCode: http.StatusNotFound, Message: "User not found", Code: "resource_not_found"}
-	ErrPasswordVerification = api.Error{StatusCode: http.StatusBadRequest, Message: "Password verification faled", Code: "bad_request"}
+	ErrPasswordVerification = api.Error{StatusCode: http.StatusBadRequest, Message: "Password verification failed", Code: "bad_request"}
 	ErrJSONParse            = api.Error{StatusCode: http.StatusUnprocessableEntity, Message: "Unable to parse JSON body", Code: "unprocessable_entity"}
 )
 
@@ -52,8 +55,34 @@ func (user *User) hashPassword() error {
 	return nil
 }
 
-func (user *User) verifyPassword(password string) (bool, error) {
-	return argon.Verify(password, user.Password)
+func (user *User) verifyPassword(password string) error {
+	valid, err := argon.Verify(password, user.Password)
+	if err != nil || !valid {
+		return ErrPasswordVerification
+	}
+	return nil
+}
+
+func getByEmail(email string) (*User, error) {
+	var user User
+	row := db.Pool.QueryRow(context.Background(), "select id, password from users where email = $1", email)
+
+	if err := row.Scan(&user.ID, &user.Password); err != nil {
+		return nil, api.ErrInternal("internal error", "")
+	}
+
+	return &user, nil
+}
+
+func getByPhone(phone string) (*User, error) {
+	var user User
+	row := db.Pool.QueryRow(context.Background(), "select id, password from users where phone = $1", phone)
+
+	if err := row.Scan(&user.ID, &user.Password); err != nil {
+		return nil, api.ErrInternal("internal error", "")
+	}
+
+	return &user, nil
 }
 
 func getAll() (*[]User, error) {
@@ -70,7 +99,6 @@ func getAll() (*[]User, error) {
 	for rows.Next() {
 		var user User
 		if err := rows.Scan(&user.ID, &user.FirstName, &user.LastName, &user.Email, &user.Phone); err != nil {
-			fmt.Println(err)
 			return nil, api.Error{StatusCode: 500, Message: "Something went wrong", Code: "query_err"}
 		}
 		users = append(users, user)
@@ -94,11 +122,11 @@ func create(req NewUserReq) (*User, error) {
 
 	row := db.Pool.QueryRow(
 		context.Background(),
-		"insert into users (first_name, last_name, email, phone, password) values ($1, $2, $3, $4, $5) returning id",
+		"insert into users (first_name, last_name, email, phone, password) values ($1, $2, $3, nullif($4, ''), $5) returning id",
 		user.FirstName, user.LastName, user.Email, user.Phone, user.Password,
 	)
 
-	if err := row.Scan(&req.ID); err != nil {
+	if err := row.Scan(&user.ID); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) {
 			if pgerrcode.IsIntegrityConstraintViolation(pgErr.Code) {
@@ -167,6 +195,63 @@ func getUser(userId int) (*User, error) {
 	return &user, nil
 }
 
+func insertSession(userId int, remoteAddr string) (*Session, error) {
+	session := NewSession(userId, time.Now().AddDate(0, 6, 0))
+	host, _, _ := net.SplitHostPort(remoteAddr)
+
+	row := db.Pool.QueryRow(context.Background(), "insert into sessions (user_id, expires_at, ip) values ($1, $2, $3) returning id", session.UserID, session.ExpiresAt, host)
+
+	if err := row.Scan(&session.ID); err != nil {
+		return nil, api.ErrInternal(err.Error(), "")
+	}
+
+	return session, nil
+}
+
+func updateSessionCookies(w http.ResponseWriter, r *http.Request, session *Session) error {
+	sidsCookie, err := r.Cookie(securecookie.SidsCookieName)
+	if errors.Is(err, http.ErrNoCookie) {
+		sidsCookie = &http.Cookie{}
+	}
+
+	sids, err := securecookie.Decode(sidsCookie)
+
+	if err != nil {
+		return api.Error{StatusCode: 500, Message: err.Error(), Code: "internal_error"}
+	}
+
+	cleanSids := util.Filter(strings.Split(sids, "|"), func(s string) bool { return len(s) != 0 })
+	sids = strings.Join(append(cleanSids, session.ID), "|")
+	value, err := securecookie.Encode(securecookie.SidsCookieName, sids)
+
+	if err != nil {
+		return api.Error{StatusCode: 500, Message: err.Error(), Code: "internal_error"}
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     securecookie.SidsCookieName,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+		Value:    value,
+	})
+
+	value, err = securecookie.Encode(securecookie.SidCookieName, session.ID)
+
+	if err != nil {
+		return api.Error{StatusCode: 500, Message: err.Error(), Code: "internal_error"}
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     securecookie.SidCookieName,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+		Value:    value,
+		Expires:  session.ExpiresAt,
+	})
+
+	return nil
+}
+
 func createSession(req SessionReq, remoteAddr string) (*Session, error) {
 	var user User
 
@@ -179,10 +264,10 @@ func createSession(req SessionReq, remoteAddr string) (*Session, error) {
 		return nil, api.Error{StatusCode: 500, Message: "Internal error", Code: "internal_error"}
 	}
 
-	match, err := user.verifyPassword(req.Password)
+	err := user.verifyPassword(req.Password)
 
-	if err != nil || !match {
-		return nil, ErrPasswordVerification
+	if err != nil {
+		return nil, err
 	}
 
 	session := NewSession(user.ID, time.Now().AddDate(0, 6, 0))

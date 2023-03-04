@@ -100,15 +100,43 @@ func HandleGetAll(w http.ResponseWriter, r *http.Request) error {
 
 type LoginViewParams struct {
 	Method string
+	Flash  *util.FlashMessage
+}
+
+type SignupParams struct {
+	Method string
+	Flash  *util.FlashMessage
 }
 
 func HandleLoginView(w http.ResponseWriter, r *http.Request) error {
 	method := r.URL.Query().Get("method")
-	return views.Login.ExecuteTemplate(w, "login.html", &LoginViewParams{Method: method})
+
+	fm, err := util.GetFlash(w, r)
+	if err != nil {
+		return err
+	}
+
+	params := &LoginViewParams{
+		Method: method,
+		Flash:  fm,
+	}
+
+	return views.Login.ExecuteTemplate(w, "login.html", params)
 }
 
 func HandleSignupView(w http.ResponseWriter, r *http.Request) error {
-	return views.Signup.ExecuteTemplate(w, "signup.html", "")
+	method := r.URL.Query().Get("method")
+	fm, err := util.GetFlash(w, r)
+	if err != nil {
+		return err
+	}
+
+	params := &SignupParams{
+		Method: method,
+		Flash:  fm,
+	}
+
+	return views.Signup.ExecuteTemplate(w, "signup.html", params)
 }
 
 func HandleAuthorizeView(w http.ResponseWriter, r *http.Request) error {
@@ -121,17 +149,52 @@ func HandleSignup(w http.ResponseWriter, r *http.Request) error {
 }
 
 func HandleLogin(w http.ResponseWriter, r *http.Request) error {
+	req := SessionReq{
+		Email:    r.FormValue("email"),
+		Phone:    r.FormValue("phone"),
+		Password: r.FormValue("password"),
+	}
+
+	var user *User
+	var err error
+
+	if len(req.Email) > 0 {
+		user, err = getByEmail(req.Email)
+	} else {
+		user, err = getByPhone(req.Phone)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	err = user.verifyPassword(req.Password)
+	if err != nil {
+		return err
+	}
+
+	session, err := insertSession(user.ID, r.RemoteAddr)
+
+	if err := updateSessionCookies(w, r, session); err != nil {
+		return err
+	}
+
+	returnTo := r.URL.Query().Get("return_to")
+	if len(returnTo) == 0 {
+		returnTo = "/"
+	}
+
+	http.Redirect(w, r, returnTo, http.StatusFound)
 	return nil
 }
 
 func HandleCreate(w http.ResponseWriter, r *http.Request) error {
-	var userReq NewUserReq
-	defer r.Body.Close()
-
-	err := json.NewDecoder(r.Body).Decode(&userReq)
-
-	if err != nil {
-		return ErrJSONParse
+	userReq := NewUserReq{
+		Email:     r.FormValue("email"),
+		Phone:     r.FormValue("phone"),
+		Password:  r.FormValue("password"),
+		FirstName: r.FormValue("first_name"),
+		LastName:  r.FormValue("last_name"),
 	}
 
 	user, err := create(userReq)
@@ -140,7 +203,23 @@ func HandleCreate(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	return api.WriteJSON(w, http.StatusCreated, user)
+	session, err := insertSession(user.ID, r.RemoteAddr)
+
+	if err != nil {
+		return err
+	}
+
+	if err = updateSessionCookies(w, r, session); err != nil {
+		return err
+	}
+
+	returnTo := r.URL.Query().Get("return_to")
+	if len(returnTo) == 0 {
+		returnTo = "/"
+	}
+
+	http.Redirect(w, r, returnTo, http.StatusFound)
+	return nil
 }
 
 func HandleCreateSession(w http.ResponseWriter, r *http.Request) error {
