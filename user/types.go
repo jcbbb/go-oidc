@@ -13,6 +13,7 @@ type User struct {
 	ID            int    `json:"id"`
 	FirstName     string `json:"first_name"`
 	LastName      string `json:"last_name"`
+	Picture       string `json:"picture"`
 	Email         string `json:"email"`
 	EmailVerified bool   `json:"email_verified"`
 	Phone         string `json:"phone"`
@@ -34,4 +35,5 @@ type NewUserReq struct {
 	Email     string `json:"email"`
 	Phone     string `json:"phone"`
 	Password  string `json:"password"`
+	Picture   string `json:"picture"`
 }

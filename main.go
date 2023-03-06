@@ -12,8 +12,8 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jcbbb/go-oidc/api"
+	"github.com/jcbbb/go-oidc/auth"
 	"github.com/jcbbb/go-oidc/db"
-	"github.com/jcbbb/go-oidc/user"
 	"github.com/jcbbb/go-oidc/views"
 	"github.com/joho/godotenv"
 )
@@ -135,15 +135,24 @@ func main() {
 	// mux.Get("/authorize", func(w http.ResponseWriter, r *http.Request) {}) // authorization consent screen
 	// mux.Post("/token", func(w http.ResponseWriter, r *http.Request) {})    // retrieve token
 
-	r.Get("/users", api.MakeHandlerFuncJSON(user.HandleGetAll))
-	r.Get("/auth/login", api.MakeHandlerFuncJSON(user.HandleLoginView))
-	r.Get("/auth/signup", api.MakeHandlerFuncJSON(user.HandleSignupView))
-	r.Post("/auth/signup", api.MakeHandlerFuncJSON(user.HandleLogin))
-	r.Post("/auth/login", api.MakeHandlerFuncJSON(user.HandleSignup))
-	r.Post("/users", api.MakeHandlerFunc(user.HandleCreate))
-	r.Get("/users/new", api.MakeHandlerFunc(user.HandleSignupView))
-	r.Get("/sessions/new", api.MakeHandlerFunc(user.HandleLoginView))
-	r.Post("/sessions", api.MakeHandlerFunc(user.HandleLogin))
+	// r.Get("/users", api.MakeHandlerFuncJSON(user.HandleGetAll))
+	// r.Get("/auth/login", api.MakeHandlerFuncJSON(user.HandleLoginView))
+	// r.Get("/auth/signup", api.MakeHandlerFuncJSON(user.HandleSignupView))
+	// r.Post("/auth/signup", api.MakeHandlerFuncJSON(user.HandleLogin))
+	// r.Post("/auth/login", api.MakeHandlerFuncJSON(user.HandleSignup))
+	r.Route("/users", func(r chi.Router) {
+		r.Post("/", api.MakeHandlerFunc(auth.HandleSignup))
+		r.Get("/new", api.MakeHandlerFunc(auth.HandleSignupView))
+	})
+
+	r.Route("/sessions", func(r chi.Router) {
+		r.Get("/new", api.MakeHandlerFunc(auth.HandleLoginView))
+		r.Post("/", api.MakeHandlerFunc(auth.HandleLogin))
+	})
+
+	r.Route("/oauth2", func(r chi.Router) {
+		r.Get("/auth", api.MakeHandlerFunc(auth.HandleConsentView))
+	})
 
 	workDir, _ := os.Getwd()
 	FileServer(r, "/static", http.Dir(filepath.Join(workDir, "static")))

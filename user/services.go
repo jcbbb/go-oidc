@@ -2,22 +2,19 @@ package user
 
 import (
 	"context"
-	"database/sql"
+	"crypto/md5"
+	"encoding/hex"
 	"errors"
 	"fmt"
-	"net"
+	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgerrcode"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jcbbb/go-oidc/api"
 	"github.com/jcbbb/go-oidc/argon"
 	"github.com/jcbbb/go-oidc/db"
-	"github.com/jcbbb/go-oidc/securecookie"
-	"github.com/jcbbb/go-oidc/util"
 )
 
 var (
@@ -26,13 +23,19 @@ var (
 	ErrJSONParse            = api.Error{StatusCode: http.StatusUnprocessableEntity, Message: "Unable to parse JSON body", Code: "unprocessable_entity"}
 )
 
-func New(firstName, lastName, email, phone, password string) *User {
+func New(firstName, lastName, email, phone, password, picture string) *User {
+	h := md5.New()
+	io.WriteString(h, email)
+	hex := hex.EncodeToString(h.Sum(nil))
+	picture = "https://gravatar.com/avatar/" + hex + "?d=retro"
+
 	return &User{
 		FirstName: firstName,
 		LastName:  lastName,
 		Email:     email,
 		Phone:     phone,
 		Password:  password,
+		Picture:   picture,
 	}
 }
 
@@ -55,7 +58,7 @@ func (user *User) hashPassword() error {
 	return nil
 }
 
-func (user *User) verifyPassword(password string) error {
+func (user *User) VerifyPassword(password string) error {
 	valid, err := argon.Verify(password, user.Password)
 	if err != nil || !valid {
 		return ErrPasswordVerification
@@ -63,7 +66,7 @@ func (user *User) verifyPassword(password string) error {
 	return nil
 }
 
-func getByEmail(email string) (*User, error) {
+func GetByEmail(email string) (*User, error) {
 	var user User
 	row := db.Pool.QueryRow(context.Background(), "select id, password from users where email = $1", email)
 
@@ -74,7 +77,7 @@ func getByEmail(email string) (*User, error) {
 	return &user, nil
 }
 
-func getByPhone(phone string) (*User, error) {
+func GetByPhone(phone string) (*User, error) {
 	var user User
 	row := db.Pool.QueryRow(context.Background(), "select id, password from users where phone = $1", phone)
 
@@ -112,8 +115,8 @@ func getAll() (*[]User, error) {
 	return &users, nil
 }
 
-func create(req NewUserReq) (*User, error) {
-	user := New(req.FirstName, req.LastName, req.Email, req.Phone, req.Password)
+func Create(req NewUserReq) (*User, error) {
+	user := New(req.FirstName, req.LastName, req.Email, req.Phone, req.Password, req.Picture)
 	err := user.hashPassword()
 
 	if err != nil {
@@ -122,8 +125,8 @@ func create(req NewUserReq) (*User, error) {
 
 	row := db.Pool.QueryRow(
 		context.Background(),
-		"insert into users (first_name, last_name, email, phone, password) values ($1, $2, $3, nullif($4, ''), $5) returning id",
-		user.FirstName, user.LastName, user.Email, user.Phone, user.Password,
+		"insert into users (first_name, last_name, email, phone, password, picture) values ($1, $2, nullif($3, ''), nullif($4, ''), $5, $6) returning id",
+		user.FirstName, user.LastName, user.Email, user.Phone, user.Password, user.Picture,
 	)
 
 	if err := row.Scan(&user.ID); err != nil {
@@ -139,53 +142,10 @@ func create(req NewUserReq) (*User, error) {
 	return user, nil
 }
 
-func getSession(sid string) (Session, error) {
-	var session Session
-	row := db.Pool.QueryRow(context.Background(), "select id, user_id, expires_at, active from sessions where id = $1", sid)
-
-	if err := row.Scan(&session.ID, &session.UserID, &session.ExpiresAt, &session.Active); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			fmt.Printf("Here")
-			return session, api.ErrResourceNotFound("Session not found for user", "")
-		}
-		fmt.Printf("After")
-		return session, api.ErrInternal("Internal error", "")
-	}
-
-	return session, nil
-}
-
-func getSessions(sids []string) ([]Session, error) {
-	var sessions []Session
-	rows, err := db.Pool.Query(context.Background(), "select id, user_id, expires_at, active from sessions where id = any($1)", sids)
-
-	defer rows.Close()
-	if err != nil {
-		fmt.Println(err)
-		return nil, api.Error{StatusCode: 500, Message: "Something went wrong", Code: "query_err"}
-	}
-
-	for rows.Next() {
-		var session Session
-		if err := rows.Scan(&session.ID, &session.UserID, &session.ExpiresAt, &session.Active); err != nil {
-			fmt.Println(err)
-			return nil, api.Error{StatusCode: 500, Message: "Something went wrong", Code: "query_err"}
-		}
-		sessions = append(sessions, session)
-	}
-
-	if err := rows.Err(); err != nil {
-		fmt.Println(err)
-		return nil, api.Error{StatusCode: 500, Message: "Something went wrong", Code: "query_err"}
-	}
-
-	return sessions, nil
-}
-
-func getUser(userId int) (*User, error) {
+func GetById(userId int) (*User, error) {
 	var user User
 
-	row := db.Pool.QueryRow(context.Background(), "select id, email, phone, first_name, last_name, email_verified, phone_verified, verified from users where id = $1", userId)
+	row := db.Pool.QueryRow(context.Background(), "select id, coalesce(email, '') as email, coalesce(phone, '') as phone, first_name, last_name, email_verified, phone_verified, verified from users where id = $1", userId)
 
 	if err := row.Scan(&user.ID, &user.Email, &user.Phone, &user.FirstName, &user.LastName, &user.EmailVerified, &user.PhoneVerified, &user.Verified); err != nil {
 		fmt.Println(err)
@@ -195,103 +155,27 @@ func getUser(userId int) (*User, error) {
 	return &user, nil
 }
 
-func insertSession(userId int, remoteAddr string) (*Session, error) {
-	session := NewSession(userId, time.Now().AddDate(0, 6, 0))
-	host, _, _ := net.SplitHostPort(remoteAddr)
+func GetByIds(ids []int) ([]User, error) {
+	var users []User
 
-	row := db.Pool.QueryRow(context.Background(), "insert into sessions (user_id, expires_at, ip) values ($1, $2, $3) returning id", session.UserID, session.ExpiresAt, host)
-
-	if err := row.Scan(&session.ID); err != nil {
-		return nil, api.ErrInternal(err.Error(), "")
-	}
-
-	return session, nil
-}
-
-func updateSessionCookies(w http.ResponseWriter, r *http.Request, session *Session) error {
-	sidsCookie, err := r.Cookie(securecookie.SidsCookieName)
-	if errors.Is(err, http.ErrNoCookie) {
-		sidsCookie = &http.Cookie{}
-	}
-
-	sids, err := securecookie.Decode(sidsCookie)
+	rows, err := db.Pool.Query(context.Background(), "select id, coalesce(email, '') as email, coalesce(phone, '') as phone, first_name, last_name, email_verified, phone_verified, verified, picture from users where id = any($1)", ids)
 
 	if err != nil {
-		return api.Error{StatusCode: 500, Message: err.Error(), Code: "internal_error"}
+		return nil, api.Error{StatusCode: 500, Message: err.Error(), Code: "query_err"}
 	}
 
-	cleanSids := util.Filter(strings.Split(sids, "|"), func(s string) bool { return len(s) != 0 })
-	sids = strings.Join(append(cleanSids, session.ID), "|")
-	value, err := securecookie.Encode(securecookie.SidsCookieName, sids)
-
-	if err != nil {
-		return api.Error{StatusCode: 500, Message: err.Error(), Code: "internal_error"}
-	}
-
-	http.SetCookie(w, &http.Cookie{
-		Name:     securecookie.SidsCookieName,
-		Secure:   false,
-		SameSite: http.SameSiteLaxMode,
-		Value:    value,
-	})
-
-	value, err = securecookie.Encode(securecookie.SidCookieName, session.ID)
-
-	if err != nil {
-		return api.Error{StatusCode: 500, Message: err.Error(), Code: "internal_error"}
-	}
-
-	http.SetCookie(w, &http.Cookie{
-		Name:     securecookie.SidCookieName,
-		Secure:   false,
-		SameSite: http.SameSiteLaxMode,
-		Value:    value,
-		Expires:  session.ExpiresAt,
-	})
-
-	return nil
-}
-
-func createSession(req SessionReq, remoteAddr string) (*Session, error) {
-	var user User
-
-	row := db.Pool.QueryRow(context.Background(), "select id, email, password from users where email = $1", req.Email)
-
-	if err := row.Scan(&user.ID, &user.Email, &user.Password); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, ErrUserNotFound
+	for rows.Next() {
+		var user User
+		if err := rows.Scan(&user.ID, &user.Email, &user.Phone, &user.FirstName, &user.LastName, &user.EmailVerified, &user.PhoneVerified, &user.Verified, &user.Picture); err != nil {
+			return nil, api.Error{StatusCode: 500, Message: err.Error(), Code: "query_err"}
 		}
-		return nil, api.Error{StatusCode: 500, Message: "Internal error", Code: "internal_error"}
+
+		users = append(users, user)
 	}
 
-	err := user.verifyPassword(req.Password)
-
-	if err != nil {
-		return nil, err
+	if err := rows.Err(); err != nil {
+		return nil, api.Error{StatusCode: 500, Message: err.Error(), Code: "query_err"}
 	}
 
-	session := NewSession(user.ID, time.Now().AddDate(0, 6, 0))
-
-	host, _, _ := net.SplitHostPort(remoteAddr)
-	row = db.Pool.QueryRow(context.Background(), "insert into sessions (user_id, expires_at, ip) values ($1, $2, $3) returning id", session.UserID, session.ExpiresAt, host)
-
-	if err := row.Scan(&session.ID); err != nil {
-		return nil, api.Error{StatusCode: 500, Message: err.Error(), Code: "internal_error"}
-	}
-
-	return session, nil
+	return users, nil
 }
-
-// // func createClient(w http.ResponseWriter, r *http.Request) error {
-// // 	var client Client
-// // 	defer r.Body.Close()
-// // 	err := json.NewDecoder(r.Body).Decode(&client)
-
-// // 	if err != nil {
-// // 		return ApiError{StatusCode: 400, Message: "Unable to decode json body", Code: "invalid_json"}
-// // 	}
-
-// // 	w.Header().Set("Content-Type", "application/json")
-// // 	w.WriteHeader(200)
-// // 	return json.NewEncoder(w).Encode(client)
-// }

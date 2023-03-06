@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/jcbbb/go-oidc/util"
@@ -41,6 +42,7 @@ func MakeHandlerFuncJSON(f apiFunc) http.HandlerFunc {
 func MakeHandlerFunc(f apiFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := f(w, r); err != nil {
+			fmt.Printf("ERROR: %+v\n", err)
 			errTo := r.URL.Query().Get("err_to")
 
 			if len(errTo) == 0 {
@@ -74,7 +76,7 @@ func ErrResourceNotFound(message, uri string) Error {
 func ErrBadRequest(message, uri string) Error {
 	return Error{
 		StatusCode: http.StatusBadRequest,
-		Code:       "bad_request",
+		Code:       "invalid_request",
 		Message:    message,
 		URI:        uri,
 	}

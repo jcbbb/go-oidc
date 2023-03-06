@@ -11,6 +11,7 @@ CREATE TABLE "users" (
   "password" varchar(255) NOT NULL,
   "verified" boolean DEFAULT FALSE,
   "created_at" timestamp with time zone DEFAULT NOW() NOT NULL,
+  "picture" varchar(255) NOT NULL,
   CONSTRAINT "users_pkey" PRIMARY KEY ("id")
 );
 

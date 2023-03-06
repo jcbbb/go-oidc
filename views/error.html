@@ -1,0 +1,18 @@
+{{template "layout.html" .}}
+{{define "title"}}Signup{{end}}
+{{define "content"}}
+<div class="h-screen flex items-center justify-center">
+  <div class="max-w-md mx-auto rounded-md bg-white p-6 space-y-6 w-full">
+    <h1 class="text-2xl font-semibold">Error</h1>
+    <div class="flex flex-col space-y-2 text-gray-900 text-sm">
+      <div>
+        <span class="block">
+          {{.Message}}
+        </span>
+        <a href="{{.URI}}" class="font-medium text-blue-600">More about this error</a>
+      </div>
+      <span>Error {{.StatusCode}}: {{.Code}}</span>
+    </div>
+  </div>
+</div>
+{{end}}
