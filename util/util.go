@@ -1,7 +1,9 @@
 package util
 
 import (
+	"crypto/rand"
 	"encoding/base64"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -20,6 +22,31 @@ const (
 type FlashMessage struct {
 	Value []byte
 	Kind  FlashMessageKind
+}
+
+func Contains[T any](s []T, test func(T) bool) bool {
+	for _, v := range s {
+		if test(v) {
+			return true
+		}
+	}
+	return false
+}
+
+var table = [...]byte{'1', '2', '3', '4', '5', '6', '7', '8', '9', '0'}
+
+func RandN(max uint) string {
+	b := make([]byte, 6)
+	n, err := io.ReadAtLeast(rand.Reader, b, 6)
+	if n != 6 {
+		panic(err)
+	}
+
+	for i := 0; i < len(b); i++ {
+		b[i] = table[int(b[i])%len(table)]
+	}
+
+	return string(b)
 }
 
 func Filter[T any](slice []T, test func(T) bool) (ret []T) {

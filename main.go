@@ -152,6 +152,11 @@ func main() {
 
 	r.Route("/oauth2", func(r chi.Router) {
 		r.Get("/auth", api.MakeHandlerFunc(auth.HandleConsentView))
+		r.Post("/auth", api.MakeHandlerFunc(auth.HandleConsent))
+		r.Route("/token", func(r chi.Router) {
+			// r.Use(auth.HandleClientCtx)
+			r.Post("/", api.MakeHandlerFuncJSON(auth.HandleToken))
+		})
 	})
 
 	workDir, _ := os.Getwd()
@@ -177,3 +182,6 @@ func FileServer(r chi.Router, path string, root http.FileSystem) {
 		fs.ServeHTTP(w, r)
 	})
 }
+
+// ABAC
+// subject, object, operation, environment

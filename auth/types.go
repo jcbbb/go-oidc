@@ -2,13 +2,15 @@ package auth
 
 import (
 	"time"
+
+	"github.com/jcbbb/go-oidc/client"
 )
 
 type Session struct {
 	ID        string    `json:"id"`
 	Active    bool      `json:"active"`
 	ExpiresAt time.Time `json:"expires_at"`
-	UserID    int       `json:"user_id"`
+	UserID    uint      `json:"user_id"`
 }
 
 type LoginReq struct {
@@ -17,25 +19,43 @@ type LoginReq struct {
 	Password string `json:"password"`
 }
 
-type oauthResponseType string
-
-const (
-	CodeResponseType  oauthResponseType = "code"
-	TokenResponseType oauthResponseType = "token"
-)
-
 type AuthorizationReq struct {
-	ResponseType        oauthResponseType
-	ClientID            string
+	ID                  uint
+	ResponseType        string
+	Client              *client.Client
 	CodeChallenge       string
 	CodeChallengeMethod string
 	RedirectURI         string
-	Scope               string
+	Scopes              []client.Scope
 	State               string
+	UserID              uint
+	Code                string
+	ExpiresAt           time.Time
 }
 
-type AuthorizationResponse struct {
-	Code  int
-	State string
-	ISS   string
+type Permission struct {
+	Scope   string
+	Name    string
+	IconURI string
+}
+
+type TokenReq struct {
+	GrantType    string `json:"grant_type"`
+	Code         string `json:"code"`
+	CodeVerifier string `json:"code_verifier"`
+	RedirectURI  string `json:"redirect_uri"`
+	Username     string `json:"username"`
+	Password     string `json:"password"`
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
+}
+
+type AccessToken struct {
+	Iss      string    `json:"iss"`
+	Exp      string    `json:"exp"`
+	Aud      string    `json:"aud"`
+	ClientID string    `json:"client_id"`
+	Iat      time.Time `json:"iat"`
+	Jti      string    `json:"jti"`
+	Scope    string    `json:"scope"`
 }

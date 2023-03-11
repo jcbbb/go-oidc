@@ -59,6 +59,11 @@ func MakeHandlerFunc(f apiFunc) http.HandlerFunc {
 				return
 			}
 
+			util.SetFlash(w, &util.FlashMessage{
+				Kind:  util.FlashError,
+				Value: []byte(err.Error()),
+			})
+
 			http.Redirect(w, r, errTo, http.StatusFound)
 		}
 	}

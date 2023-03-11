@@ -6,11 +6,11 @@ type Session struct {
 	ID        string    `json:"id"`
 	Active    bool      `json:"active"`
 	ExpiresAt time.Time `json:"expires_at"`
-	UserID    int       `json:"user_id"`
+	UserID    uint      `json:"user_id"`
 }
 
 type User struct {
-	ID            int    `json:"id"`
+	ID            uint   `json:"id"`
 	FirstName     string `json:"first_name"`
 	LastName      string `json:"last_name"`
 	Picture       string `json:"picture"`
@@ -29,7 +29,7 @@ type SessionReq struct {
 }
 
 type NewUserReq struct {
-	ID        int    `json:"id"`
+	ID        uint   `json:"id"`
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
 	Email     string `json:"email"`

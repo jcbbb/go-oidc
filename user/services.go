@@ -39,7 +39,7 @@ func New(firstName, lastName, email, phone, password, picture string) *User {
 	}
 }
 
-func NewSession(userId int, expiresAt time.Time) *Session {
+func NewSession(userId uint, expiresAt time.Time) *Session {
 	return &Session{
 		UserID:    userId,
 		ExpiresAt: expiresAt,
@@ -142,7 +142,7 @@ func Create(req NewUserReq) (*User, error) {
 	return user, nil
 }
 
-func GetById(userId int) (*User, error) {
+func GetById(userId uint) (*User, error) {
 	var user User
 
 	row := db.Pool.QueryRow(context.Background(), "select id, coalesce(email, '') as email, coalesce(phone, '') as phone, first_name, last_name, email_verified, phone_verified, verified from users where id = $1", userId)
@@ -155,7 +155,7 @@ func GetById(userId int) (*User, error) {
 	return &user, nil
 }
 
-func GetByIds(ids []int) ([]User, error) {
+func GetByIds(ids []uint) ([]User, error) {
 	var users []User
 
 	rows, err := db.Pool.Query(context.Background(), "select id, coalesce(email, '') as email, coalesce(phone, '') as phone, first_name, last_name, email_verified, phone_verified, verified, picture from users where id = any($1)", ids)

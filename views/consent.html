@@ -5,12 +5,25 @@
   <div class="max-w-md mx-auto rounded-md bg-white p-6 space-y-6 w-full">
     <div>
       <h1 class="text-2xl font-semibold text-gray-900">Choose account</h1>
-      <p class="mt-1 text-gray-700">to go application <span class="text-blue-600 font-semibold">application-name</span></p>
+      <p class="mt-1 text-gray-700">to go application <span class="text-blue-600 font-semibold">{{.Client.Name}}</span></p>
     </div>
+    {{if .Flash}}
+      <div class="bg-red-50 text-red-600 p-3 rounded-md text-sm">
+        {{ printf "%s" .Flash.Value }}
+      </div>
+    {{end}}
     <ul>
       {{range .Users}}
         <li>
-          <form method="post" action="/consent">
+          <form method="post" action="{{$.Action}}">
+            <input type="hidden" name="user_id" value="{{.ID}}" />
+            <!-- <input type="hidden" name="redirect_uri" value="{{$.Req.RedirectURI}}" />
+                 <input type="hidden" name="response_type" value="{{$.Req.ResponseType}}" />
+                 <input type="hidden" name="client_id" value="{{$.Client.ID}}" />
+                 <input type="hidden" name="code_challenge" value="{{$.Req.CodeChallenge}}" />
+                 <input type="hidden" name="code_challenge_method" value="{{$.Req.CodeChallengeMethod}}" />
+                 <input type="hidden" name="scope" value="{{$.Req.Scope}}" />
+                 <input type="hidden" name="state" value="{{$.Req.State}}" /> -->
             <button type="submit" class="w-full flex items-center p-2 space-x-2 hover:bg-yellow-50 duration-200 rounded-md overflow-hidden">
               <div class="w-8 h-8">
                 <img src="{{.Picture}}" alt="" class="flex-shrink-0 w-full rounded-full object-cover" />
